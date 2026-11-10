@@ -10,10 +10,6 @@ use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class AnexoAExcelExportService
@@ -41,8 +37,8 @@ class AnexoAExcelExportService
 
         $orderedRecords = $registros
             ->sortBy([
-                fn ($registro) => $registro->anexo_id ?? 0,
-                fn ($registro) => $registro->item ?? 0,
+                ['anexo_id', 'asc'],
+                ['item', 'asc'],
             ])
             ->values();
 
@@ -113,116 +109,62 @@ class AnexoAExcelExportService
 
     private function resolveTemplatePath(): ?string
     {
-        $preferred = storage_path(
-            'app/templates/anexo_a_template.xlsx'
-        );
+        $candidates = [
+            resource_path('plantillas/ANEXO_A_ITEM_6.xlsx'),
+            resource_path('plantillas/plantilla_anexo_a.xlsx'),
+            storage_path('app/templates/anexo_a_template.xlsx'),
+            storage_path('app/templates/ANEXO_A_EXPORTADO.xlsx'),
+        ];
 
-        if (is_file($preferred)) {
-            return $preferred;
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
         }
 
-        $fallback = storage_path(
-            'app/templates/ANEXO_A_EXPORTADO.xlsx'
-        );
-
-        return is_file($fallback)
-            ? $fallback
-            : null;
+        return null;
     }
 
+    /**
+     * Rellena unicamente los valores dinamicos de la cabecera institucional.
+     *
+     * La plantilla oficial ya trae las etiquetas fijas (A3:A8), las celdas
+     * combinadas, la tipografia y los estilos. Aqui solo se escriben los
+     * valores que cambian por anexo, sin volver a combinar ni re-estilar nada.
+     */
     private function writeInstitutionalBlock(
         Worksheet $sheet,
         array $configuracion,
         ?Anexo $anexo
     ): void {
 
-        $sheet->mergeCells('A2:S2');
-
-        $sheet->setCellValue('A2', config('anexo.title'));
-
-        $sheet->setCellValue('A3', 'EMPRESA:');
-        $sheet->setCellValue('B3', $configuracion['empresa'] ?? null);
-        $sheet->mergeCells('B3:S3');
-
-        $sheet->setCellValue('A4', 'RUC:');
-        $sheet->setCellValue('B4', $configuracion['ruc'] ?? null);
-        $sheet->mergeCells('B4:H4');
-
-        $sheet->setCellValue('I4', 'CONTRATO:');
-        $sheet->setCellValue('J4', $configuracion['contrato'] ?? null);
-        $sheet->mergeCells('J4:S4');
-
-        $sheet->setCellValue('A5', 'DIVISION:');
-        $sheet->setCellValue('B5', $configuracion['division'] ?? null);
-        $sheet->mergeCells('B5:S5');
-
-        $sheet->setCellValue(
-            'A6',
-            'NOMBRE DEL SERVICIO CONTRATADO:'
-        );
-
-        $sheet->setCellValue(
-            'B6',
-            $configuracion['nombre_servicio_contratado'] ?? null
-        );
-
-        $sheet->mergeCells('B6:S6');
-
-        $sheet->setCellValue(
-            'A7',
-            'PERIODO DE EJECUCION CONTRACTUAL:'
-        );
-
-        $sheet->setCellValue(
-            'B7',
-            $anexo?->periodo_ejecucion_contractual
-                ?: ($configuracion['periodo_ejecucion_contractual'] ?? '')
-        );
-
-        $sheet->mergeCells('B7:S7');
-
-        $sheet->setCellValue(
-            'A8',
-            'FECHA CONTRACTUAL PARA INGRESO DE ENTREGABLE:'
-        );
-
-        $sheet->setCellValue(
-            'B8',
-            $this->resolveFechaIngresoExportValue(
+        $values = [
+            'B3' => $configuracion['empresa'] ?? null,
+            'B4' => $configuracion['ruc'] ?? null,
+            'J4' => $configuracion['contrato'] ?? null,
+            'B5' => $configuracion['division'] ?? null,
+            'B6' => $configuracion['nombre_servicio_contratado'] ?? null,
+            'B7' => $anexo?->periodo_ejecucion_contractual
+                ?: ($configuracion['periodo_ejecucion_contractual'] ?? null),
+            'B8' => $this->resolveFechaIngresoExportValue(
                 $anexo,
                 $configuracion
-            )
-        );
+            ),
+        ];
 
-        $sheet->mergeCells('B8:S8');
+        foreach ($values as $coordinate => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
 
-        $sheet->getStyle('A2:S8')
-            ->getAlignment()
-            ->setVertical(Alignment::VERTICAL_CENTER);
-
-        $sheet->getStyle('A2:S8')
-            ->getAlignment()
-            ->setWrapText(true);
-
-        $sheet->getStyle('A2:S2')
-            ->applyFromArray([
-                'font' => [
-                    'bold' => true,
-                    'size' => 14,
-                    'color' => [
-                        'rgb' => '1F1F1F',
-                    ],
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                ],
-            ]);
-
-        $sheet->getStyle('A3:A8')
-            ->getFont()
-            ->setBold(true);
+            $sheet->setCellValue($coordinate, $value);
+        }
     }
 
+    /**
+     * La plantilla oficial ya contiene la fila de encabezados con su estilo.
+     * Solo se escriben las etiquetas que falten, sin re-estilar la fila.
+     */
     private function writeHeaderRow(
         Worksheet $sheet,
         int $row
@@ -235,52 +177,24 @@ class AnexoAExcelExportService
         foreach ($headers as $index => $header) {
 
             $column = Coordinate::stringFromColumnIndex($index + 1);
+            $coordinate = "{$column}{$row}";
 
-            $sheet->setCellValue(
-                "{$column}{$row}",
-                $header
-            );
+            if ($sheet->getCell($coordinate)->getValue() !== null
+                && $sheet->getCell($coordinate)->getValue() !== '') {
+                continue;
+            }
+
+            $sheet->setCellValue($coordinate, $header);
         }
-
-        $sheet->getStyle("A{$row}:S{$row}")
-            ->applyFromArray([
-
-                'font' => [
-                    'bold' => true,
-                    'size' => 10,
-                    'color' => [
-                        'rgb' => 'FFFFFF',
-                    ],
-                ],
-
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => [
-                        'rgb' => '1F4E78',
-                    ],
-                ],
-
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER,
-                    'wrapText' => true,
-                ],
-
-                'borders' => [
-                    'allBorders' => [
-                        'borderStyle' => Border::BORDER_THIN,
-                        'color' => [
-                            'rgb' => 'D9D9D9',
-                        ],
-                    ],
-                ],
-
-            ]);
-
-        $sheet->getRowDimension($row)
-            ->setRowHeight(30);
     }
 
+    /**
+     * Prepara el area de datos conservando el formato de la plantilla.
+     *
+     * La fila $startRow de la plantilla actua como molde: se limpian sus
+     * valores, se replica su estilo en las filas adicionales y se eliminan
+     * las filas sobrantes que pudieran venir en la plantilla.
+     */
     private function prepareDataArea(
         Worksheet $sheet,
         int $startRow,
@@ -333,11 +247,19 @@ class AnexoAExcelExportService
             );
 
             $sheet->getRowDimension($row)
-                ->setRowHeight(
-                    $templateRowHeight > 0
-                        ? $templateRowHeight
-                        : 24
-                );
+                ->setRowHeight($templateRowHeight);
+        }
+
+        // insertNewRowBefore() deja las filas nuevas con la altura de la fila
+        // molde. Se restaura la altura automatica de la plantilla para que el
+        // texto largo se ajuste igual que en el archivo original.
+        for (
+            $row = $startRow + 1;
+            $row < $startRow + $recordCount;
+            $row++
+        ) {
+            $sheet->getRowDimension($row)
+                ->setRowHeight(-1);
         }
     }
 
@@ -371,7 +293,7 @@ class AnexoAExcelExportService
                 'P' => $registro->estado_entregable,
                 'Q' => $registro->observaciones,
                 'R' => $registro->comentarios,
-                'S' => $registro->observaciones_condiciones,
+                'S' => $registro->getAttribute('observaciones_condiciones'),
 
             ];
 
@@ -383,92 +305,36 @@ class AnexoAExcelExportService
                 );
             }
 
-            $sheet->getRowDimension($row)
-                ->setRowHeight(24);
-
             $row++;
         }
     }
 
+    /**
+     * El estilo de las filas de datos ya se replica desde la fila molde de la
+     * plantilla en prepareDataArea(). No se re-estila para no alterar el diseno.
+     */
     private function applyDataStyles(
         Worksheet $sheet,
         int $startRow,
         int $lastRow
     ): void {
-
-        $sheet->getStyle(
-            "A{$startRow}:S{$lastRow}"
-        )->applyFromArray([
-
-            'alignment' => [
-                'vertical' => Alignment::VERTICAL_CENTER,
-                'wrapText' => true,
-            ],
-
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => Border::BORDER_THIN,
-                    'color' => [
-                        'rgb' => 'D9D9D9',
-                    ],
-                ],
-            ],
-
-        ]);
+        // Intencionalmente vacio: el formato proviene de la plantilla oficial.
     }
 
+    /**
+     * Conserva anchos, freeze pane, orientacion y configuracion de impresion
+     * de la plantilla. Solo se amplia el AutoFilter para cubrir las filas
+     * de datos realmente exportadas.
+     */
     private function applyDocumentSettings(
         Worksheet $sheet,
         int $headerRow,
         int $lastRow
     ): void {
 
-        $widths = [
-
-            'A' => 18,
-            'B' => 10,
-            'C' => 22,
-            'D' => 30,
-            'E' => 22,
-            'F' => 18,
-            'G' => 20,
-            'H' => 40,
-            'I' => 25,
-            'J' => 28,
-            'K' => 22,
-            'L' => 12,
-            'M' => 18,
-            'N' => 18,
-            'O' => 22,
-            'P' => 25,
-            'Q' => 35,
-            'R' => 35,
-            'S' => 35,
-
-        ];
-
-        foreach ($widths as $column => $width) {
-
-            $sheet->getColumnDimension($column)
-                ->setWidth($width);
-        }
-
-        $sheet->freezePane('A12');
-
         $sheet->setAutoFilter(
             "A{$headerRow}:S{$lastRow}"
         );
-
-        $sheet->getPageSetup()
-            ->setOrientation(
-                PageSetup::ORIENTATION_LANDSCAPE
-            );
-
-        $sheet->getPageSetup()
-            ->setFitToWidth(1);
-
-        $sheet->getPageSetup()
-            ->setFitToHeight(0);
     }
 
     private function resolveFechaIngresoExportValue(
