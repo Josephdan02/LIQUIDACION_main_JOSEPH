@@ -305,6 +305,17 @@ class AnexoAExcelExportService
                 );
             }
 
+            // Codigos como texto: evita que Excel convierta "23.1" en numero
+            // o pierda ceros iniciales ("056" -> 56).
+            foreach (['A', 'C', 'G'] as $column) {
+                $cell = $sheet->getCell("{$column}{$row}");
+                $valor = $cell->getValue();
+
+                if ($valor !== null && $valor !== '') {
+                    $cell->setValueExplicit((string) $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                }
+            }
+
             $row++;
         }
     }

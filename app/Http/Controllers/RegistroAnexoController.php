@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Anexo;
 use App\Models\RegistroAnexo;
+use App\Services\Anexo\AgenteFiscalizacionLookup;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +57,41 @@ class RegistroAnexoController extends Controller
             'selectedAnexoId' => $selectedAnexoId,
             'nextItemPreview' => $selectedAnexoId ? $this->nextItem($selectedAnexoId) : null,
             'estados' => $this->estadoOptions(),
+            'codigoUnidadOptions' => $this->codigoUnidadOptions(),
+        ]);
+    }
+
+    /**
+     * Consulta de solo lectura del Excel de agentes de fiscalizacion.
+     */
+    public function consultarAgente(Request $request, AgenteFiscalizacionLookup $lookup): JsonResponse
+    {
+        $data = $request->validate([
+            'codigo' => ['required', 'string', 'max:50'],
+        ]);
+
+        $codigo = trim($data['codigo']);
+
+        if ($lookup->esAmbiguo($codigo)) {
+            return response()->json([
+                'encontrado' => false,
+                'mensaje' => 'El Código OSINERGMIN está duplicado en la relación de agentes. Verifícalo manualmente.',
+            ]);
+        }
+
+        $agente = $lookup->buscarPorCodigoOsinergmin($codigo);
+
+        if ($agente === null) {
+            return response()->json([
+                'encontrado' => false,
+                'mensaje' => 'No se encontró el Código OSINERGMIN',
+            ]);
+        }
+
+        return response()->json([
+            'encontrado' => true,
+            'codigo_actividad' => $agente['actividad'],
+            'razon_social_agente' => $agente['razon_social'],
         ]);
     }
 
@@ -101,6 +138,7 @@ class RegistroAnexoController extends Controller
             'selectedAnexoId' => $registro->anexo_id,
             'nextItemPreview' => $registro->item,
             'estados' => $this->estadoOptions(),
+            'codigoUnidadOptions' => $this->codigoUnidadOptions(),
         ]);
     }
 
@@ -190,6 +228,11 @@ class RegistroAnexoController extends Controller
     private function estadoOptions(): array
     {
         return config('anexo.estado_entregable_options');
+    }
+
+    private function codigoUnidadOptions(): array
+    {
+        return config('anexo.codigo_unidad_options', []);
     }
 
     private function applyDefaultAnexoIfNeeded(Request $request): void

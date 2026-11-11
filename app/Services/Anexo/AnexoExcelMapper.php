@@ -82,22 +82,25 @@ class AnexoExcelMapper
 
     private function detectColumnMap(array $headerRow): array
     {
+        // El orden importa: los alias mas especificos van primero para que
+        // "OBSERVACIONES CONDICIONES" no sea capturado por "OBSERVACIONES".
         $aliases = [
+            'observaciones_condiciones' => ['OBSERVACIONES CONDICIONES', 'OBSERVACION CONDICIONES'],
             'item' => ['ITEM'],
             'codigo_unidad' => ['CODIGO DE UNIDAD', 'CODIGO UNIDAD'],
             'expediente_siged' => ['N EXPEDIENTE SIGED DE LA ASIGNACION DE SERVICIO', 'N EXPEDIENTE SIGED', 'EXPEDIENTE SIGED', 'NRO EXPEDIENTE SIGED'],
-            'fecha_asignacion' => ['FECHA DE ASIGNACION DE TRABAJO', 'FECHA DE ASIGNACION'],
+            'fecha_asignacion' => ['FECHA DE ASIGNACION DE TRABAJO', 'FECHA DE ASIGNACION', 'FECHA ASIGNACION'],
             'numero_documento' => ['N DE DOCUMENTO', 'N DOCUMENTO', 'NRO DOCUMENTO', 'NUMERO DOCUMENTO'],
             'codigo_osinergmin' => ['CODIGO DE OSINERMING', 'CODIGO OSINERGMIN'],
             'codigo_actividad' => ['CODIGO ACTIVIDAD'],
             'razon_social_agente' => ['RAZON SOCIAL DEL AGENTE Y O INSTALACION SUPERVISADO A', 'RAZON SOCIAL DEL AGENTE', 'RAZON SOCIAL AGENTE'],
             'tipo_supervision' => ['TIPO DE SUPERVISION FISCALIZACION', 'TIPO DE SUPERVISION', 'TIPO SUPERVISION'],
-            'tipo_entregable' => ['ENTREGABLE DEL SERVICIO TIPO DE DOCUMENTO INFORME OTROS', 'TIPO DE ENTREGABLE'],
+            'tipo_entregable' => ['ENTREGABLE DEL SERVICIO TIPO DE DOCUMENTO INFORME OTROS', 'TIPO DE ENTREGABLE', 'TIPO ENTREGABLE'],
             'numero_informe' => ['NUMERO DE INFORME', 'NRO INFORME', 'NUMERO INFORME'],
             'visitado' => ['VISITADO'],
             'efectividad' => ['EFECTIVIDAD'],
-            'fecha_visita' => ['FECHA DE VISITA'],
-            'fecha_derivacion' => ['FECHA DE DERIVACION DE ENTREGABLE SIGED CORRE', 'FECHA DE DERIVACION'],
+            'fecha_visita' => ['FECHA DE VISITA', 'FECHA VISITA'],
+            'fecha_derivacion' => ['FECHA DE DERIVACION DE ENTREGABLE SIGED CORRE', 'FECHA DE DERIVACION', 'FECHA DERIVACION'],
             'estado_entregable' => ['ESTADO DEL ENTREGABLE', 'ESTADO ENTREGABLE'],
             'personal_es' => ['NOMBRE Y APELLIDO DE PERSONAL DE LA ES', 'PERSONAL DE LA ES', 'PERSONAL ES'],
             'observaciones' => ['OBSERVACIONES'],
@@ -109,11 +112,19 @@ class AnexoExcelMapper
         foreach ($headerRow as $index => $value) {
             $normalized = $this->normalizeText($value);
 
+            if ($normalized === '') {
+                continue;
+            }
+
             foreach ($aliases as $field => $candidates) {
+                if (isset($map[$field])) {
+                    continue;
+                }
+
                 foreach ($candidates as $candidate) {
                     if (str_contains($normalized, $candidate)) {
                         $map[$field] = $index;
-                        continue 3;
+                        continue 2;
                     }
                 }
             }
@@ -153,6 +164,7 @@ class AnexoExcelMapper
                 'personal_es' => $this->nullIfEmpty($this->cell($row, $columnMap, 'personal_es')),
                 'observaciones' => $this->nullIfEmpty($this->cell($row, $columnMap, 'observaciones')),
                 'comentarios' => $this->nullIfEmpty($this->cell($row, $columnMap, 'comentarios')),
+                'observaciones_condiciones' => $this->nullIfEmpty($this->cell($row, $columnMap, 'observaciones_condiciones')),
             ];
 
             if ($this->isMeaningfulRecord($record)) {
@@ -244,17 +256,32 @@ class AnexoExcelMapper
         }
 
         try {
+            // Serial de Excel: solo se acepta un rango razonable para no
+            // convertir numeros sueltos (p. ej. un anio) en fechas de 1900.
             if (is_numeric($value)) {
-                return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value))->format('Y-m-d');
+                $serial = (float) $value;
+
+                if ($serial >= 20000 && $serial <= 80000) {
+                    return Carbon::instance(ExcelDate::excelToDateTimeObject($serial))->format('Y-m-d');
+                }
+
+                return null;
             }
 
-            $spanishLongDate = $this->parseSpanishLongDate((string) $value);
+            $texto = trim((string) $value);
+
+            $spanishLongDate = $this->parseSpanishLongDate($texto);
 
             if ($spanishLongDate) {
                 return $spanishLongDate;
             }
 
-            return Carbon::parse((string) $value)->format('Y-m-d');
+            // Formato peruano dd/mm/yyyy (Carbon::parse lo leeria como m/d/Y).
+            if (preg_match('#^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$#', $texto, $m)) {
+                return Carbon::createFromDate((int) $m[3], (int) $m[2], (int) $m[1])->format('Y-m-d');
+            }
+
+            return Carbon::parse($texto)->format('Y-m-d');
         } catch (\Throwable) {
             return null;
         }

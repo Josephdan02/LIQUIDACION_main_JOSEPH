@@ -2,6 +2,15 @@
     $editing = isset($registro);
     $selectedAnexo = $anexos->firstWhere('id', (int) old('anexo_id', $selectedAnexoId ?? $registro->anexo_id ?? 0));
     $showAnexoSelector = $anexos->count() > 1;
+
+    $codigoUnidadOptions = $codigoUnidadOptions ?? config('anexo.codigo_unidad_options', []);
+    $codigoUnidadActual = (string) old('codigo_unidad', $registro->codigo_unidad ?? '');
+
+    // Si el valor guardado no esta en el catalogo, se conserva como opcion
+    // adicional para no perder datos historicos.
+    if ($codigoUnidadActual !== '' && ! in_array($codigoUnidadActual, $codigoUnidadOptions, true)) {
+        array_unshift($codigoUnidadOptions, $codigoUnidadActual);
+    }
 @endphp
 
 <div class="space-y-6">
@@ -37,9 +46,23 @@
                 <label class="form-label" for="item">{{ config('anexo.column_labels.item') }}</label>
                 <input class="form-input" type="number" min="1" id="item" name="item" value="{{ old('item', $registro->item ?? $nextItemPreview ?? '') }}" placeholder="Déjalo vacío para autogenerar">
             </div>
-            <div>
+            <div class="md:col-span-2">
                 <label class="form-label" for="codigo_unidad">{{ config('anexo.column_labels.codigo_unidad') }}</label>
-                <input class="form-input" type="text" id="codigo_unidad" name="codigo_unidad" value="{{ old('codigo_unidad', $registro->codigo_unidad ?? '') }}">
+                <input
+                    class="form-input"
+                    type="text"
+                    id="codigo_unidad_buscar"
+                    list="codigo_unidad_lista"
+                    placeholder="Escribe el código o parte de la descripción para filtrar..."
+                    autocomplete="off"
+                >
+                <select class="form-input mt-2" id="codigo_unidad" name="codigo_unidad" size="6">
+                    <option value="">— Sin código —</option>
+                    @foreach ($codigoUnidadOptions as $opcion)
+                        <option value="{{ $opcion }}" @selected($codigoUnidadActual === $opcion)>{{ $opcion }}</option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-slate-500">Escribe arriba para filtrar la lista y luego selecciona una opción.</p>
             </div>
             <div class="md:col-span-2">
                 <label class="form-label" for="expediente_siged">{{ config('anexo.column_labels.expediente_siged') }}</label>
@@ -55,7 +78,16 @@
             </div>
             <div>
                 <label class="form-label" for="codigo_osinergmin">{{ config('anexo.column_labels.codigo_osinergmin') }}</label>
-                <input class="form-input" type="text" id="codigo_osinergmin" name="codigo_osinergmin" value="{{ old('codigo_osinergmin', $registro->codigo_osinergmin ?? '') }}">
+                <input
+                    class="form-input"
+                    type="text"
+                    id="codigo_osinergmin"
+                    name="codigo_osinergmin"
+                    value="{{ old('codigo_osinergmin', $registro->codigo_osinergmin ?? '') }}"
+                    data-agente-url="{{ route('registros.consultar.agente') }}"
+                    autocomplete="off"
+                >
+                <p class="mt-1 text-xs text-slate-500" id="codigo_osinergmin_estado">Presiona ENTER para autocompletar.</p>
             </div>
             <div>
                 <label class="form-label" for="codigo_actividad">{{ config('anexo.column_labels.codigo_actividad') }}</label>

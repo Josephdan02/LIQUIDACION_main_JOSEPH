@@ -16,11 +16,14 @@ Route::get('/registros/exportar', [ExportarAnexoController::class, 'filtrado'])-
 Route::get('/registros/exportar-hoy', [ExportarAnexoController::class, 'hoy'])->name('registros.exportar.hoy');
 Route::get('/registros/exportar-todo', [ExportarAnexoController::class, 'todo'])->name('registros.exportar.todo');
 Route::post('/registros/exportar-seleccionados', [ExportarAnexoController::class, 'seleccionados'])->name('registros.exportar.seleccionados');
+Route::get('/registros/consultar-agente', [RegistroAnexoController::class, 'consultarAgente'])->name('registros.consultar.agente');
 Route::get('/registros/{registro}/exportar-excel', [ExportarAnexoController::class, 'registroExcel'])->name('registros.exportar.excel');
 Route::resource('registros', RegistroAnexoController::class);
 
 Route::get('/importaciones/anexo-a', [ImportarAnexoController::class, 'create'])->name('importaciones.create');
+Route::post('/importaciones/anexo-a/preview', [ImportarAnexoController::class, 'preview'])->name('importaciones.preview');
 Route::post('/importaciones/anexo-a', [ImportarAnexoController::class, 'store'])->name('importaciones.store');
+Route::post('/importaciones/anexo-a/cancelar', [ImportarAnexoController::class, 'cancel'])->name('importaciones.cancel');
 
 Route::get('/anexos/{anexo}/exportar-excel', [ExportarAnexoController::class, 'excel'])->name('anexos.exportar.excel');
 Route::get('/anexos/{anexo}/exportar-pdf', [ExportarAnexoController::class, 'pdf'])->name('anexos.exportar.pdf');

@@ -6,35 +6,51 @@
 @section('content')
     <section class="card-panel">
         <div class="mb-6">
-            <h3 class="font-display text-xl font-bold text-slate-900">Importación mínima del Anexo A</h3>
+            <h3 class="font-display text-xl font-bold text-slate-900">Importar Anexo A</h3>
             <p class="mt-2 max-w-3xl text-sm text-slate-500">
-                El importador intenta detectar la fila donde aparece <strong>ITEM</strong> y luego mapear las columnas del detalle.
-                La lectura de cabecera institucional se aplica sobre la configuración base del sistema. Si el archivo trae nombres o celdas combinadas distintas, revisa la configuración y los registros importados.
+                Selecciona el anexo de destino y sube el archivo Excel del Anexo A. El sistema detecta las columnas
+                automáticamente, valida los datos y te muestra una vista previa antes de guardar nada.
             </p>
         </div>
 
-        <div class="mb-6 flex flex-col gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <p class="text-sm font-semibold text-cyan-900">Exportación por anexo</p>
-                <p class="mt-1 text-sm text-cyan-800">La descarga del Excel se hace desde el detalle del anexo seleccionado para no mezclar registros.</p>
-            </div>
-            <a href="{{ route('anexos.index') }}" class="btn-primary">Ir a Anexos</a>
-        </div>
-
-        <form action="{{ route('importaciones.store') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
+        <form action="{{ route('importaciones.preview') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
             @csrf
+
+            <div>
+                <label class="form-label" for="anexo_id">Anexo de destino</label>
+                <select class="form-input" id="anexo_id" name="anexo_id" required>
+                    <option value="">Selecciona un anexo</option>
+                    @foreach ($anexos as $anexo)
+                        <option value="{{ $anexo->id }}" @selected((string) old('anexo_id') === (string) $anexo->id)>
+                            #{{ $anexo->id }} — {{ $anexo->titulo }}
+                            @if ($anexo->periodo_ejecucion_contractual)
+                                ({{ $anexo->periodo_ejecucion_contractual }})
+                            @endif
+                        </option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-slate-500">Los registros se guardarán en el anexo que elijas, sin crear anexos nuevos.</p>
+            </div>
+
             <div>
                 <label class="form-label" for="archivo">Archivo Excel (.xlsx o .xls)</label>
                 <input class="form-input" type="file" id="archivo" name="archivo" accept=".xlsx,.xls" required>
+                <p class="mt-1 text-xs text-slate-500">Tamaño máximo: 10 MB.</p>
             </div>
 
-            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Si la estructura del Excel no coincide exactamente con la esperada, el formulario seguirá funcionando y mostrará un error amigable en lugar de romper la aplicación.
+            <div class="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+                <p class="font-semibold">Qué hace el sistema</p>
+                <ul class="mt-2 list-disc space-y-1 pl-5">
+                    <li>Reconoce los encabezados aunque cambien mayúsculas, tildes o espacios.</li>
+                    <li>Busca cada Código OSINERGMIN en el catálogo de agentes y completa lo que falte.</li>
+                    <li>Marca las filas con errores y los duplicados reales.</li>
+                    <li>Muestra una vista previa antes de guardar.</li>
+                </ul>
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <a href="{{ route('dashboard') }}" class="btn-secondary">Volver</a>
-                <button type="submit" class="btn-primary">Importar archivo</button>
+                <button type="submit" class="btn-primary">Analizar archivo</button>
             </div>
         </form>
     </section>
